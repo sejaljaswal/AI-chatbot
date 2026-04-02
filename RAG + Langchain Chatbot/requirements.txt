@@ -1,0 +1,9 @@
+langchain
+python-dotenv
+unstructured
+markdown
+langchain-google-genai
+google-generativeai
+langchain-community
+langchain-core
+faiss-cpu

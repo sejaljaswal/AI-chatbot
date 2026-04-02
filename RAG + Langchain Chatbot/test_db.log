@@ -1,0 +1,255 @@
+Starting tests...
+
+[RAG Setup] Loading documents from ./docs...
+[RAG Setup] Splitting documents into chunks...
+[RAG Setup] Creating embeddings (models/gemini-embedding-001)...
+[RAG Setup] Initializing Gemini LLM (gemini-1.5-flash) with fallbacks...
+Startup and Ingestion: OK 8.85 seconds
+
+--- Testing: Standard Retrieval ---
+Time: 40.9s
+Answer: # Japan Trip Schedule
+
+### Overall Trip Duration
+Based on the provided itinerary, the Japan trip is scheduled to take place from **April 5, 2025, to April 19, 2025**. This timeframe is explicitly stated in the main heading of the "Japan Trip Itinerary" document.
+
+### Key Travel Dates
+The trip involves the following specific travel dates as detailed in the "Flight Information" section:
+
+*   **Departure Date:** The trip begins on **April 5, 2025**, with a flight departing from San Francisco International Airport (SFO) at 11:05 AM.
+*   **Arrival in Japan:** The outbound flight arrives at Tokyo Narita International Airport (NRT) on **April 6, 2025**, at 2:25 PM.
+*   **Return Date:** The trip concludes on **April 19, 2025**, with a departure from Tokyo Narita International Airport (NRT) at 5:05 PM, arriving back in San Francisco on the same day at 10:30 AM.
+
+### Accommodation Timeline
+The itinerary also outlines the stay within Japan across two main locations:
+*   **Tokyo:** April 6 to April 10, 2025.
+*   **Kyoto:** April 10 to April 14, 2025.
+*   **Final Days in Tokyo:** The schedule continues through the final day on April 18 and the departure day on April 19.
+
+**Sources:**
+*   *Japan Trip Itinerary (Header)*
+*   *Flight Information (Outbound and Return sections)*
+*   *Accommodation Details (Tokyo and Kyoto sections)*
+Source docs retrieved: 3
+
+--- Testing: Out of Context ---
+Time: 29.91s
+Answer: # Information Request Regarding Recipe
+
+## Recipe Details
+I couldn't find this information in the provided documents. The provided text consists of a Personal Health Journal containing vital statistics, medication logs, exercise routines, doctor visit summaries, nutrition goals, and sleep tracking data, but it does not include any food recipes or instructions for making a chocolate cake.
+Source docs retrieved: 3
+
+--- Testing: Empty Input ---
+Error during execution: Error embedding content (INVALID_ARGUMENT): 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'EmbedContentRequest.content contains an empty Part.', 'status': 'INVALID_ARGUMENT'}}
+
+--- Testing: Very Long Query ---
+Traceback (most recent call last):
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/test_rag.py", line 29, in <module>
+    run_test("A "*1000, "Very Long Query")
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/test_rag.py", line 19, in run_test
+    result = qa_chain.invoke({"query": query})
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/base.py", line 167, in invoke
+    self._call(inputs, run_manager=run_manager)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/retrieval_qa/base.py", line 154, in _call
+    answer = self.combine_documents_chain.run(
+        input_documents=docs,
+        question=question,
+        callbacks=_run_manager.get_child(),
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/_api/deprecation.py", line 205, in warning_emitting_wrapper
+    return wrapped(*args, **kwargs)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/base.py", line 637, in run
+    return self(kwargs, callbacks=callbacks, tags=tags, metadata=metadata)[
+           ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/_api/deprecation.py", line 205, in warning_emitting_wrapper
+    return wrapped(*args, **kwargs)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/base.py", line 413, in __call__
+    return self.invoke(
+           ~~~~~~~~~~~^
+        inputs,
+        ^^^^^^^
+    ...<2 lines>...
+        include_run_info=include_run_info,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/base.py", line 167, in invoke
+    self._call(inputs, run_manager=run_manager)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/combine_documents/base.py", line 141, in _call
+    output, extra_return_dict = self.combine_docs(
+                                ~~~~~~~~~~~~~~~~~^
+        docs,
+        ^^^^^
+        callbacks=_run_manager.get_child(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **other_keys,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/combine_documents/stuff.py", line 266, in combine_docs
+    return self.llm_chain.predict(callbacks=callbacks, **inputs), {}
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/llm.py", line 315, in predict
+    return self(kwargs, callbacks=callbacks)[self.output_key]
+           ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/_api/deprecation.py", line 205, in warning_emitting_wrapper
+    return wrapped(*args, **kwargs)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/base.py", line 413, in __call__
+    return self.invoke(
+           ~~~~~~~~~~~^
+        inputs,
+        ^^^^^^^
+    ...<2 lines>...
+        include_run_info=include_run_info,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/base.py", line 167, in invoke
+    self._call(inputs, run_manager=run_manager)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/llm.py", line 117, in _call
+    response = self.generate([inputs], run_manager=run_manager)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_classic/chains/llm.py", line 135, in generate
+    results = self.llm.bind(stop=stop, **self.llm_kwargs).batch(
+        cast("list", prompts),
+        {"callbacks": callbacks},
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/runnables/base.py", line 5730, in batch
+    return self.bound.batch(
+           ~~~~~~~~~~~~~~~~^
+        inputs,
+        ^^^^^^^
+    ...<2 lines>...
+        **{**self.kwargs, **kwargs},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/runnables/fallbacks.py", line 318, in batch
+    outputs = runnable.batch(
+        [input_ for _, input_ in sorted(run_again.items())],
+    ...<6 lines>...
+        **kwargs,
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/runnables/base.py", line 912, in batch
+    return cast("list[Output]", [invoke(inputs[0], configs[0])])
+                                 ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/runnables/base.py", line 904, in invoke
+    return self.invoke(input_, config, **kwargs)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_google_genai/chat_models.py", line 2535, in invoke
+    return super().invoke(input, config, stop=stop, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 454, in invoke
+    self.generate_prompt(
+    ~~~~~~~~~~~~~~~~~~~~^
+        [self._convert_input(input)],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    ).generations[0][0],
+    ^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 1185, in generate_prompt
+    return self.generate(prompt_messages, stop=stop, callbacks=callbacks, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 995, in generate
+    self._generate_with_cache(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        m,
+        ^^
+    ...<2 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_core/language_models/chat_models.py", line 1297, in _generate_with_cache
+    result = self._generate(
+        messages, stop=stop, run_manager=run_manager, **kwargs
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/langchain_google_genai/chat_models.py", line 3047, in _generate
+    response: GenerateContentResponse = self.client.models.generate_content(
+                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        **request,
+        ^^^^^^^^^^
+    )
+    ^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/google/genai/models.py", line 6021, in generate_content
+    response = self._generate_content(
+        model=model, contents=contents, config=parsed_config
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/google/genai/models.py", line 4683, in _generate_content
+    response = self._api_client.request(
+        'post', path, request_dict, http_options
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1532, in request
+    response = self._request(http_request, http_options, stream=False)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1325, in _request
+    return retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 470, in __call__
+    do = self.iter(retry_state=retry_state)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 371, in iter
+    result = action(retry_state)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 393, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 473, in __call__
+    result = fn(*args, **kwargs)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1303, in _request_once
+    response = self._httpx_client.send(httpx_request, stream=stream)  # type: ignore[union-attr]
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpcore/_sync/connection.py", line 103, in handle_request
+    return self._connection.handle_request(request)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 136, in handle_request
+    raise exc
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 106, in handle_request
+    ) = self._receive_response_headers(**kwargs)
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 177, in _receive_response_headers
+    event = self._receive_event(timeout=timeout)
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 217, in _receive_event
+    data = self._network_stream.read(
+        self.READ_NUM_BYTES, timeout=timeout
+    )
+  File "/Users/sejaljaswal/Desktop/Langchain-master/RAG + Langchain Chatbot/venv/lib/python3.13/site-packages/httpcore/_backends/sync.py", line 128, in read
+    return self._sock.recv(max_bytes)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ssl.py", line 1285, in recv
+    return self.read(buflen)
+           ~~~~~~~~~^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ssl.py", line 1140, in read
+    return self._sslobj.read(len)
+           ~~~~~~~~~~~~~~~~~^^^^^
+KeyboardInterrupt
