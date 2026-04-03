@@ -267,9 +267,21 @@ export default function App() {
                         {doc.status === 'uploading' ? <span className="text-[10px] text-zinc-400 flex items-center animate-pulse">processing</span> : <span className="text-[10px] text-emerald-500 flex items-center font-bold">INDEXED</span>}
                       </div>
                     </div>
-                    <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => handlePreviewFile(doc.name)} className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 rounded-lg"><ExternalLink className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleDeleteFile(doc.name)} className="p-1.5 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/30 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <div className="flex items-center space-x-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
+                      <button
+                        onClick={() => handlePreviewFile(doc.name)}
+                        className="p-3 md:p-1.5 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 rounded-lg"
+                        title="Preview"
+                      >
+                        <ExternalLink className="w-5 h-5 md:w-3.5 md:h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteFile(doc.name)}
+                        className="p-3 md:p-1.5 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/30 rounded-lg"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-5 h-5 md:w-3.5 md:h-3.5" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -365,11 +377,48 @@ export default function App() {
 
       {selectedFileUrl && (
         <aside className="fixed inset-0 z-50 lg:relative lg:inset-auto lg:w-[600px] xl:w-[750px] flex flex-col border-l animate-in slide-in-from-right duration-300 bg-white dark:bg-zinc-900 border-zinc-800 shadow-2xl">
-          <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-            <div className="flex items-center space-x-3"><div className="p-2 bg-indigo-600/10 rounded-lg"><FileText className="w-5 h-5 text-indigo-600" /></div><h3 className="font-bold text-sm truncate max-w-[200px]">{selectedFileUrl.split('/').pop()}</h3></div>
-            <button onClick={() => setSelectedFileUrl(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors"><X className="w-5 h-5 opacity-50" /></button>
+          <div className={`flex items-center justify-between p-4 border-b ${isDarkMode ? 'border-zinc-800' : 'border-slate-200'}`}>
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-indigo-600/10 rounded-lg">
+                <FileText className="w-5 h-5 text-indigo-600" />
+              </div>
+              <h3 className="font-bold text-sm truncate max-w-[120px] sm:max-w-[200px]">
+                {selectedFileUrl.split('/').pop()?.split('?')[0]}
+              </h3>
+            </div>
+            <div className="flex items-center space-x-1">
+              <a
+                href={selectedFileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                title="Open in new tab"
+              >
+                <ExternalLink className="w-5 h-5 opacity-50" />
+              </a>
+              <button
+                onClick={() => setSelectedFileUrl(null)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5 opacity-50" />
+              </button>
+            </div>
           </div>
-          <div className="flex-1 bg-zinc-950 overflow-hidden relative"><iframe src={`${selectedFileUrl}#view=FitH`} className="w-full h-full border-none" title="PDF Preview" /></div>
+          <div className="flex-1 bg-zinc-950 overflow-hidden relative">
+            <iframe
+              src={`${selectedFileUrl}#view=FitH`}
+              className="w-full h-full border-none"
+              title="PDF Preview"
+            />
+          </div>
+          {/* Mobile Fallback Footer */}
+          <div className="lg:hidden p-4 border-t bg-slate-50 dark:bg-zinc-800/50 flex justify-center">
+            <a href={selectedFileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-indigo-500 font-bold text-sm">
+              <ExternalLink className="w-4 h-4" />
+              <span>Full Screen Preview</span>
+            </a>
+          </div>
         </aside>
       )}
     </div>
