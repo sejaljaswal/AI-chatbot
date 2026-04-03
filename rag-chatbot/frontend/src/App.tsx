@@ -198,7 +198,8 @@ export default function App() {
   };
 
   const handlePreviewFile = (filename: string) => {
-    const url = `${API_URL}/files/${filename}`;
+    // Append token to the URL so the backend can authorize the iframe view
+    const url = `${API_URL}/files/${filename}?token=${token}`;
     setSelectedFileUrl(url);
   };
 

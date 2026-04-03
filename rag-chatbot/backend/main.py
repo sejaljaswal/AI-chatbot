@@ -28,20 +28,20 @@ os.environ['SSL_CERT_FILE'] = certifi.where()
 
 app = FastAPI()
 
-# ADD SESSION MIDDLEWARE (Must be before CORS)
+# 1. ADD SESSION MIDDLEWARE (Inner-most for Authlib)
 SECRET_KEY = os.getenv("JWT_SECRET") or "insecure-default-key-change-me"
 app.add_middleware(
     SessionMiddleware, 
     secret_key=SECRET_KEY, 
     session_cookie="vault_session",
     same_site="lax",
-    https_only=False # Set to True in production with SSL
+    https_only=False
 )
 
-# Allow cross-origin requests from the React frontend
+# 2. ALLOW CORS (Outer Middleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"], # Your Vite frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -104,11 +104,19 @@ def create_access_token(data: dict):
     to_encode = data.copy()
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-async def get_current_user(request: Request):
+async def get_current_user(request: Request, token: str = None):
+    # Check Header First
     auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    
+    # Check Query Param if no header (used for iframes/previews)
+    if not token:
+        token = request.query_params.get("token")
+
+    if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    token = auth_header.split(" ")[1]
+    
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
@@ -117,13 +125,15 @@ async def get_current_user(request: Request):
 
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
-def get_qa_chain(vs):
+def get_qa_chain(vs, retriever=None):
     primary_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0, max_retries=3)
     fallback_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, max_retries=3)
     fallback_llm_2 = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0, max_retries=3)
     llm = primary_llm.with_fallbacks([fallback_llm, fallback_llm_2])
     
-    retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": 8})
+    # Use provided retriever or create a default one
+    if not retriever:
+        retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": 8})
     
     template = """
     You are a strict assistant that only answers questions based on the provided context.
@@ -182,11 +192,16 @@ def init_user_rag(user_id: str):
                     print(f"ERROR: {filename}: {e}")
 
             if documents:
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                 texts = text_splitter.split_documents(documents)
                 vs = FAISS.from_documents(texts, embeddings)
                 vs.save_local(user_faiss_dir)
                 qa = get_qa_chain(vs)
+    
+    if vs:
+        print(f"SUCCESS: System ready for {user_id} with {vs.index.ntotal} vectors.")
+    else:
+        print(f"INFO: Vault is currently empty for user {user_id}.")
     
     user_systems[user_id] = {"vs": vs, "qa": qa}
     return user_systems[user_id]
@@ -279,8 +294,12 @@ async def serve_file(filename: str, user=Depends(get_current_user)):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     
-    media_type = "application/pdf" if filename.lower().endswith(".pdf") else "text/plain"
-    return FileResponse(file_path, media_type=media_type)
+    # Return FileResponse with proper headers for PDF viewing
+    return FileResponse(
+        file_path, 
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline"} # Encourage browser to preview, not download
+    )
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...), user=Depends(get_current_user)):
@@ -296,24 +315,29 @@ async def upload_document(file: UploadFile = File(...), user=Depends(get_current
         shutil.copyfileobj(file.file, buffer)
     
     try:
+        print(f"--- [In-App Processing for {user['email']}] ---")
         loader = PyPDFLoader(file_location) if file.filename.lower().endswith('.pdf') else TextLoader(file_location, encoding='utf-8')
         new_docs = loader.load()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         new_texts = text_splitter.split_documents(new_docs)
+        print(f"Processed {len(new_texts)} chunks from {file.filename}.")
         
         # Get or init user system
         system = user_systems.get(user_id) or init_user_rag(user_id)
         vs = system['vs']
         
         if vs:
+            print(f"Updating existing index for {user_id}...")
             vs.add_documents(new_texts)
             vs.save_local(user_faiss_dir)
         else:
+            print(f"Creating first index for {user_id}...")
             vs = FAISS.from_documents(new_texts, embeddings)
             vs.save_local(user_faiss_dir)
         
-        # Update cache
+        # IMPORTANT: Always rebuild the chain after updating the vectorstore
         user_systems[user_id] = {"vs": vs, "qa": get_qa_chain(vs)}
+        print(f"Vault Updated! Total vectors now: {vs.index.ntotal}")
         
         return {
             "message": f"Successfully added {file.filename} to vault.",
@@ -356,12 +380,16 @@ async def query_backend(req: QueryRequest, user=Depends(get_current_user)):
                 search_kwargs={"k": 8, "filter": {"source": filter_path}}
             )
             # Create a temporary chain for this filtered request
-            temp_chain = get_qa_chain(vs)
-            temp_chain.retriever = filtered_retriever
+            temp_chain = get_qa_chain(vs, retriever=filtered_retriever)
             result = temp_chain.invoke({"query": req.query})
         else:
             result = qa.invoke({"query": req.query})
         
+        # LOG RETRIEVED CONTEXT
+        print(f"--- [Retrieval Result: {len(result['source_documents'])} chunks] ---")
+        for i, doc in enumerate(result['source_documents']):
+            source = os.path.basename(doc.metadata.get('source', 'unknown'))
+            print(f"  [{i+1}] {source} (Chars: {len(doc.page_content)}): {doc.page_content[:150]}...")
         sources = list(set([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in result["source_documents"]]))
         active_model = "gemini-2.5-flash-lite" 
         
