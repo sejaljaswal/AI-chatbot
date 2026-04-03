@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Send, RefreshCw, Bot, User, Loader2, FileText,
   CheckCircle, Trash2, Moon, Sun, Menu, Plus,
-  LayoutGrid, Clock
+  LayoutGrid, Clock, ExternalLink, X
 } from 'lucide-react';
 
 type Message = {
@@ -30,6 +30,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [documents, setDocuments] = useState<DocFile[]>([]);
   const [targetDocument, setTargetDocument] = useState('All Documents');
+  const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -146,6 +147,12 @@ export default function App() {
     setMessages([]);
   };
 
+  const handlePreviewFile = (filename: string) => {
+    // Generate the URL for the backend file service
+    const url = `${API_URL}/files/${filename}`;
+    setSelectedFileUrl(url);
+  };
+
   return (
     <div className={`flex h-screen ${isDarkMode ? 'dark bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-900'} transition-colors duration-300`}>
 
@@ -202,12 +209,22 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDeleteFile(doc.name)}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/30 rounded-lg transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button
+                        onClick={() => handlePreviewFile(doc.name)}
+                        className="p-1.5 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/30 rounded-lg transition-all"
+                        title="Preview Document"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteFile(doc.name)}
+                        className="p-1.5 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/30 rounded-lg transition-all"
+                        title="Delete Document"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -338,13 +355,16 @@ export default function App() {
                             <div className={`mt-5 pt-4 border-t ${isDarkMode ? 'border-zinc-800' : 'border-slate-100'} flex flex-wrap items-center gap-2`}>
                               <div className="text-[10px] font-bold uppercase tracking-widest opacity-40 mr-1">Sources</div>
                               {message.sources.map((src, i) => (
-                                <div key={i} className={`
-                                    flex items-center text-xs px-2.5 py-1 rounded-full border
+                                <button
+                                  key={i}
+                                  onClick={() => handlePreviewFile(src)}
+                                  className={`
+                                    flex items-center text-xs px-2.5 py-1 rounded-full border hover:border-indigo-500 hover:text-indigo-500 transition-all
                                     ${isDarkMode ? 'bg-zinc-950/50 border-zinc-800' : 'bg-slate-50 border-slate-200'}
                                 `}>
                                   <FileText className="w-3 h-3 mr-1.5 opacity-50" />
                                   <span className="truncate max-w-[120px]">{src}</span>
-                                </div>
+                                </button>
                               ))}
                             </div>
                           )}
@@ -485,6 +505,39 @@ export default function App() {
           </div>
         </footer>
       </div>
+
+      {/* 3. PDF Preview Panel - Slides from Right */}
+      {selectedFileUrl && (
+        <aside className={`
+          w-[500px] lg:w-[650px] flex flex-col border-l animate-in slide-in-from-right duration-300
+          ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}
+          relative z-30 shadow-2xl
+        `}>
+          <div className={`flex items-center justify-between p-4 border-b ${isDarkMode ? 'border-zinc-800' : 'border-slate-200'}`}>
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-indigo-600/10 rounded-lg">
+                <FileText className="w-5 h-5 text-indigo-600" />
+              </div>
+              <h3 className="font-bold text-sm truncate max-w-[300px]">
+                {selectedFileUrl.split('/').pop()}
+              </h3>
+            </div>
+            <button
+              onClick={() => setSelectedFileUrl(null)}
+              className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5 opacity-50" />
+            </button>
+          </div>
+          <div className="flex-1 bg-zinc-100 dark:bg-zinc-950 overflow-hidden">
+            <iframe
+              src={`${selectedFileUrl}#toolbar=0`}
+              className="w-full h-full border-none"
+              title="PDF Preview"
+            />
+          </div>
+        </aside>
+      )}
     </div>
   );
 }

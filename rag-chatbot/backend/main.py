@@ -1,6 +1,7 @@
 import os
 import shutil
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -135,6 +136,17 @@ async def delete_document(filename: str):
     else:
         raise HTTPException(status_code=404, detail="File not found")
 
+@app.get("/files/{filename}")
+async def serve_file(filename: str):
+    """Serves a document file for previewing."""
+    file_path = os.path.join(DOCS_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Set proper content type for PDF previewing in browsers
+    media_type = "application/pdf" if filename.lower().endswith(".pdf") else "text/plain"
+    return FileResponse(file_path, media_type=media_type)
+
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
     global vectorstore, qa_chain
@@ -162,7 +174,11 @@ async def upload_document(file: UploadFile = File(...)):
         # Update QA chain with new vectorstore state
         qa_chain = get_qa_chain(vectorstore)
         print(f"Updated index. Total vectors: {vectorstore.index.ntotal}")
-        return {"message": f"Successfully added {file.filename} to knowledge base."}
+        return {
+            "message": f"Successfully added {file.filename} to knowledge base.",
+            "filename": file.filename,
+            "status": "uploaded"
+        }
     except Exception as e:
         print(f"INGESTION ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
