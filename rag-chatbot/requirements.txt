@@ -12,3 +12,4 @@ uvicorn
 pypdf
 pydantic
 langchain-classic
+python-multipart
