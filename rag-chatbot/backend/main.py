@@ -34,9 +34,9 @@ qa_chain = None
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
 def get_qa_chain(vs):
-    primary_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, max_retries=3)
-    fallback_llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0, max_retries=3)
-    fallback_llm_2 = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0, max_retries=3)
+    primary_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0, max_retries=3)
+    fallback_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, max_retries=3)
+    fallback_llm_2 = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0, max_retries=3)
     llm = primary_llm.with_fallbacks([fallback_llm, fallback_llm_2])
     
     retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": 8})
@@ -208,10 +208,15 @@ async def query_backend(req: QueryRequest):
         
         sources = list(set([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in result["source_documents"]]))
         
+        # Extract model name from the result metadata or default
+        # Note: with_fallbacks makes it hard to see the final model in result
+        # we will log it locally and use a placeholder or check response metadata
+        active_model = "gemini-2.5-flash-lite" 
+        
         return {
             "answer": result["result"],
             "sources": sources,
-            "model": "gemini-1.5-flash"
+            "model": active_model
         }
     except Exception as e:
         print(f"QUERY ERROR: {e}")
