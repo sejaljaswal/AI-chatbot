@@ -7,3 +7,8 @@ google-generativeai
 langchain-community
 langchain-core
 faiss-cpu
+fastapi
+uvicorn
+pypdf
+pydantic
+langchain-classic

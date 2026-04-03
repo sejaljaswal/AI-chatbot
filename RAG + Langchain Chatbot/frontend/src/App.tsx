@@ -20,6 +20,8 @@ type DocFile = {
   status: 'uploaded' | 'uploading' | 'error';
 };
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -40,7 +42,6 @@ export default function App() {
 
   useEffect(() => {
     fetchDocuments();
-    // Use system preference for dark mode
     if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setIsDarkMode(true);
     }
@@ -48,7 +49,7 @@ export default function App() {
 
   const fetchDocuments = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/documents');
+      const res = await axios.get(`${API_URL}/documents`);
       const docs = res.data.documents.map((name: string) => ({ name, status: 'uploaded' }));
       setDocuments(docs);
     } catch (err) {
@@ -62,18 +63,13 @@ export default function App() {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-
-      // Add to sidebar immediately
       setDocuments(prev => [{ name: file.name, status: 'uploading' }, ...prev]);
-
       const formData = new FormData();
       formData.append('file', file);
-
       try {
-        await axios.post('http://localhost:8000/upload', formData, {
+        await axios.post(`${API_URL}/upload`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-
         setDocuments(prev => prev.map(d =>
           d.name === file.name ? { ...d, status: 'uploaded' } : d
         ));
@@ -84,13 +80,12 @@ export default function App() {
         ));
       }
     }
-
     e.target.value = '';
   };
 
   const handleDeleteFile = async (filename: string) => {
     try {
-      await axios.delete(`http://localhost:8000/documents/${filename}`);
+      await axios.delete(`${API_URL}/documents/${filename}`);
       setDocuments(prev => prev.filter(d => d.name !== filename));
       if (targetDocument === filename) setTargetDocument('All Documents');
     } catch (err) {
@@ -117,7 +112,7 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const res = await axios.post('http://localhost:8000/query', {
+      const res = await axios.post(`${API_URL}/query`, {
         query: userMessage.content,
         filename: targetDocument
       });
@@ -160,7 +155,7 @@ export default function App() {
         flex flex-col border-r transition-all duration-300 overflow-hidden
         ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}
         relative z-20
-      `}>
+        `}>
         <div className="p-6 flex flex-col h-full">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-2">
@@ -187,9 +182,9 @@ export default function App() {
                 )}
                 {documents.map((doc, idx) => (
                   <div key={idx} className={`
-                            group flex items-center p-3 rounded-xl border transition-all
-                            ${isDarkMode ? 'bg-zinc-800/40 border-zinc-700/50 hover:bg-zinc-800' : 'bg-slate-50 border-slate-100 hover:bg-white hover:shadow-sm'}
-                        `}>
+                    group flex items-center p-3 rounded-xl border transition-all
+                    ${isDarkMode ? 'bg-zinc-800/40 border-zinc-700/50 hover:bg-zinc-800' : 'bg-slate-50 border-slate-100 hover:bg-white hover:shadow-sm'}
+                  `}>
                     <FileText className="w-5 h-5 text-indigo-500 mr-3 flex-shrink-0" />
                     <div className="flex-1 min-w-0 pr-2">
                       <p className="text-sm font-semibold truncate leading-tight">{doc.name}</p>
@@ -225,14 +220,14 @@ export default function App() {
               className="w-full flex items-center justify-center space-x-2 p-3 text-sm font-semibold border rounded-xl hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all"
             >
               <RefreshCw className="w-4 h-4" />
-              <span>New Converation</span>
+              <span>New Conversation</span>
             </button>
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className={`
-                    w-full flex items-center justify-center space-x-2 p-3 text-sm font-semibold rounded-xl transition-all
-                    ${isDarkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}
-                `}
+                w-full flex items-center justify-center space-x-2 p-3 text-sm font-semibold rounded-xl transition-all
+                ${isDarkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}
+              `}
             >
               {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
@@ -329,7 +324,8 @@ export default function App() {
                       p-5 rounded-3xl shadow-sm text-[15px] leading-relaxed
                       ${message.role === 'user'
                         ? 'bg-indigo-600 text-white rounded-tr-none'
-                        : isDarkMode ? 'bg-zinc-900 text-zinc-100 border border-zinc-800 rounded-tl-none' : 'bg-white border text-slate-800 rounded-tl-none'}
+                        : isDarkMode ? 'bg-zinc-900 text-zinc-100 border border-zinc-800 rounded-tl-none' : 'bg-white border text-slate-800 rounded-tl-none'
+                      }
                     `}>
                       <div className="prose prose-sm dark:prose-invert max-w-none break-words">
                         {message.content}
@@ -404,11 +400,11 @@ export default function App() {
               <button
                 onClick={() => setTargetDocument('All Documents')}
                 className={`
-                    px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-tight flex items-center flex-shrink-0 transition-all border
-                    ${targetDocument === 'All Documents'
+                  px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-tight flex items-center flex-shrink-0 transition-all border
+                  ${targetDocument === 'All Documents'
                     ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
                     : (isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50')}
-                  `}
+                `}
               >
                 <LayoutGrid className="w-3 h-3 mr-1.5" /> All Vault
               </button>
@@ -417,11 +413,11 @@ export default function App() {
                   key={idx}
                   onClick={() => setTargetDocument(doc.name)}
                   className={`
-                            px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-tight flex items-center flex-shrink-0 transition-all border
-                            ${targetDocument === doc.name
+                    px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-tight flex items-center flex-shrink-0 transition-all border
+                    ${targetDocument === doc.name
                       ? 'bg-purple-600 text-white border-purple-600 shadow-md scale-105'
                       : (isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50')}
-                        `}
+                  `}
                 >
                   <FileText className="w-3 h-3 mr-1.5" /> {doc.name}
                 </button>
@@ -438,7 +434,7 @@ export default function App() {
               <div className="p-3 pl-5 mb-2">
                 <label className={`
                   p-2 rounded-xl cursor-pointer transition-all hover:opacity-100
-                  ${isDarkMode ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-slate-100 hover:bg-slate-200'} 
+                  ${isDarkMode ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-slate-100 hover:bg-slate-200'}
                   opacity-40 flex items-center justify-center
                 `}>
                   <Plus className="w-5 h-5 text-indigo-500" />
@@ -472,11 +468,12 @@ export default function App() {
                   type="submit"
                   disabled={!input.trim() || isLoading}
                   className={`
-                      flex items-center justify-center w-12 h-12 rounded-2xl transition-all shadow-lg active:scale-95
-                      ${!input.trim() || isLoading
+                    flex items-center justify-center w-12 h-12 rounded-2xl transition-all shadow-lg active:scale-95
+                    ${!input.trim() || isLoading
                       ? (isDarkMode ? 'bg-zinc-800 text-zinc-600' : 'bg-slate-100 text-slate-400')
-                      : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-500/20'}
-                    `}
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-500/20'
+                    }
+                  `}
                 >
                   {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 </button>
