@@ -174,7 +174,11 @@ class QueryRequest(BaseModel):
 @app.post("/query")
 async def query_backend(req: QueryRequest):
     if not qa_chain:
-        raise HTTPException(status_code=500, detail="RAG system is not initialized.")
+        return {
+            "answer": "The RAG system is not yet initialized. Please upload at least one document to the vault first.",
+            "sources": [],
+            "model": "System"
+        }
     
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
@@ -182,16 +186,12 @@ async def query_backend(req: QueryRequest):
     try:
         print(f"\n--- [Query: {req.query}] ---")
         
-        # If a specific filename is provided, we use a filtered retriever
         if req.filename and req.filename != "All Documents":
-            print(f"Filtering by document: {req.filename}")
-            # Recompute retriever on the fly for the filter or use a filter in search_kwargs
-            # LangChain FAISS supports 'filter' in search_kwargs
-            # Note: search_kwargs 'filter' expects a dict or a callable depending on version/provider
-            # For FAISS, we can filter using metadata
+            filter_path = os.path.join(DOCS_DIR, req.filename)
+            print(f"Filtering by path: {filter_path}")
             filtered_retriever = vectorstore.as_retriever(
                 search_type="similarity", 
-                search_kwargs={"k": 8, "filter": {"source": os.path.join(DOCS_DIR, req.filename)}}
+                search_kwargs={"k": 8, "filter": {"source": filter_path}}
             )
             # Create a temporary chain for this filtered request
             temp_chain = get_qa_chain(vectorstore)
