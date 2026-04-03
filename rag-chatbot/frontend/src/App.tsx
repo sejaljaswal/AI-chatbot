@@ -156,12 +156,20 @@ export default function App() {
   return (
     <div className={`flex h-screen ${isDarkMode ? 'dark bg-zinc-950 text-zinc-100' : 'bg-slate-50 text-slate-900'} transition-colors duration-300`}>
 
-      {/* 1. Sidebar - Left Panel */}
+      {/* Mobile Sidebar Backdrop */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* 1. Sidebar - Left Panel (Drawer on Mobile) */}
       <aside className={`
-        ${isSidebarOpen ? 'w-80' : 'w-0'} 
-        flex flex-col border-r transition-all duration-300 overflow-hidden
+        fixed inset-y-0 left-0 z-40 w-72 sm:w-80 lg:relative lg:z-20
+        flex flex-col border-r transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-0'}
         ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}
-        relative z-20
         `}>
         <div className="p-6 flex flex-col h-full">
           <div className="flex items-center justify-between mb-8">
@@ -249,6 +257,13 @@ export default function App() {
               {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
             </button>
+
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="lg:hidden w-full p-3 text-xs font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
+            >
+              Close Menu
+            </button>
           </div>
         </div>
       </aside>
@@ -264,7 +279,7 @@ export default function App() {
           <div className="flex items-center space-x-4">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors lg:hidden"
+              className="p-2 -ml-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -311,8 +326,8 @@ export default function App() {
                   </div>
                   <div className="p-4 border rounded-2xl dark:border-zinc-800/50 bg-white/5 dark:bg-zinc-900/20 backdrop-blur-sm text-sm text-left hover:scale-[1.02] transition-transform delay-150">
                     <CheckCircle className="w-4 h-4 text-emerald-500 mb-2" />
-                    <span className="font-bold block mb-1">Verified Citations</span>
-                    <span className="opacity-60 text-xs">Every answer points back to its source.</span>
+                    <span className="font-bold block mb-1">Verify Facts</span>
+                    <span className="opacity-60 text-xs">AI points back to the source document.</span>
                   </div>
                 </div>
               </div>
@@ -431,7 +446,10 @@ export default function App() {
               {documents.filter(d => d.status === 'uploaded').map((doc, idx) => (
                 <button
                   key={idx}
-                  onClick={() => setTargetDocument(doc.name)}
+                  onClick={() => {
+                    setTargetDocument(doc.name);
+                    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+                  }}
                   className={`
                     px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-tight flex items-center flex-shrink-0 transition-all border
                     ${targetDocument === doc.name
@@ -506,19 +524,20 @@ export default function App() {
         </footer>
       </div>
 
-      {/* 3. PDF Preview Panel - Slides from Right */}
+      {/* 3. PDF Preview Panel - Overlays on Mobile, Drawer on Desktop */}
       {selectedFileUrl && (
         <aside className={`
-          w-[500px] lg:w-[650px] flex flex-col border-l animate-in slide-in-from-right duration-300
+          fixed inset-0 z-50 lg:relative lg:inset-auto lg:w-[600px] xl:w-[750px]
+          flex flex-col border-l animate-in slide-in-from-right duration-300
           ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}
-          relative z-30 shadow-2xl
+          shadow-2xl
         `}>
           <div className={`flex items-center justify-between p-4 border-b ${isDarkMode ? 'border-zinc-800' : 'border-slate-200'}`}>
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-indigo-600/10 rounded-lg">
                 <FileText className="w-5 h-5 text-indigo-600" />
               </div>
-              <h3 className="font-bold text-sm truncate max-w-[300px]">
+              <h3 className="font-bold text-sm truncate max-w-[200px] sm:max-w-[300px]">
                 {selectedFileUrl.split('/').pop()}
               </h3>
             </div>
@@ -529,9 +548,9 @@ export default function App() {
               <X className="w-5 h-5 opacity-50" />
             </button>
           </div>
-          <div className="flex-1 bg-zinc-100 dark:bg-zinc-950 overflow-hidden">
+          <div className="flex-1 bg-zinc-100 dark:bg-zinc-950 overflow-hidden relative">
             <iframe
-              src={`${selectedFileUrl}#toolbar=0`}
+              src={`${selectedFileUrl}#view=FitH`}
               className="w-full h-full border-none"
               title="PDF Preview"
             />
