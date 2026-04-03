@@ -1,10 +1,14 @@
 import os
 import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from authlib.integrations.starlette_client import OAuth
+from jose import jwt, JWTError
+from starlette.middleware.sessions import SessionMiddleware
+import time
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import FAISS
@@ -12,10 +16,27 @@ from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_classic.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
+import certifi
+import httpx
 
-load_dotenv()
+# Load environment variables from the root .env
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(dotenv_path=dotenv_path)
+
+# Fix SSL Certificate Verification (especially for macOS)
+os.environ['SSL_CERT_FILE'] = certifi.where()
 
 app = FastAPI()
+
+# ADD SESSION MIDDLEWARE (Must be before CORS)
+SECRET_KEY = os.getenv("JWT_SECRET") or "insecure-default-key-change-me"
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=SECRET_KEY, 
+    session_cookie="vault_session",
+    same_site="lax",
+    https_only=False # Set to True in production with SSL
+)
 
 # Allow cross-origin requests from the React frontend
 app.add_middleware(
@@ -27,11 +48,73 @@ app.add_middleware(
 )
 
 # Root directory configuration
-DOCS_DIR = "docs"
-FAISS_INDEX = "faiss_index"
+DOCS_ROOT = "docs"
+FAISS_ROOT = "faiss_index"
 
-vectorstore = None
-qa_chain = None
+# AUTH CONFIG
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+SECRET_KEY = os.getenv("JWT_SECRET")
+
+print("\n--- [System Configuration Check] ---")
+if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+    print("FATAL ERROR: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing from .env!")
+    print("Please add them to /Users/sejaljaswal/Desktop/Langchain-master/rag-chatbot/.env")
+    # In a real production app, you might raise a SystemExit here
+    # For now, we will print big warnings to catch the user's attention
+    print("************************************************")
+    print("*  GOOGLE OAUTH IS CURRENTLY BROKEN            *")
+    print("*  ADD YOUR KEYS TO THE .env FILE              *")
+    print("************************************************")
+else:
+    # Safely log that they are loaded
+    print(f"LOADED: GOOGLE_CLIENT_ID = {GOOGLE_CLIENT_ID[:10]}...{GOOGLE_CLIENT_ID[-5:]}")
+    print(f"LOADED: GOOGLE_CLIENT_SECRET = (Hidden for security)")
+
+if not SECRET_KEY:
+    print("WARNING: JWT_SECRET is not set. Using insecure default.")
+    SECRET_KEY = "insecure-default-key-change-me"
+else:
+    print("LOADED: JWT_SECRET = (Hidden)")
+
+ALGORITHM = "HS256"
+
+# Setup User-specific state cache
+# In production, use Redis or a DB. For local, we use a dictionary.
+user_systems = {} # {user_id: {"vs": vectorstore, "qa": qa_chain}}
+
+# AUTH SETUP
+oauth = OAuth()
+oauth.register(
+    name='google',
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
+
+print("\n--- [System Configuration Check] ---")
+if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+    print("FATAL ERROR: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing from .env!")
+else:
+    print(f"LOADED: GOOGLE_CLIENT_ID = {GOOGLE_CLIENT_ID[:5]}...[SECURE]")
+
+ALGORITHM = "HS256"
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+async def get_current_user(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
 def get_qa_chain(vs):
@@ -69,113 +152,171 @@ def get_qa_chain(vs):
         chain_type_kwargs={"prompt": prompt}
     )
 
-def init_rag():
-    """Initializes or reloads the RAG system from the disk or docs folder."""
-    global vectorstore, qa_chain
-    print("\n--- [RAG System Initialization] ---")
+def init_user_rag(user_id: str):
+    """Initializes or reloads the RAG system for a specific user."""
+    print(f"\n--- [RAG System Init for User: {user_id}] ---")
     
-    if not os.path.exists(DOCS_DIR):
-        os.makedirs(DOCS_DIR)
+    user_docs_dir = os.path.join(DOCS_ROOT, user_id)
+    user_faiss_dir = os.path.join(FAISS_ROOT, user_id)
+    
+    if not os.path.exists(user_docs_dir):
+        os.makedirs(user_docs_dir)
 
-    # Try loading existing index first
-    if os.path.exists(FAISS_INDEX):
-        print(f"Loading existing FAISS index from {FAISS_INDEX}...")
-        vectorstore = FAISS.load_local(FAISS_INDEX, embeddings, allow_dangerous_deserialization=True)
-        qa_chain = get_qa_chain(vectorstore)
-        print(f"System ready with {vectorstore.index.ntotal} vectors.")
+    vs = None
+    qa = None
+
+    if os.path.exists(user_faiss_dir):
+        print(f"Loading user index from {user_faiss_dir}...")
+        vs = FAISS.load_local(user_faiss_dir, embeddings, allow_dangerous_deserialization=True)
+        qa = get_qa_chain(vs)
     else:
-        # If no index, scan docs folder and build from scratch
-        file_names = [f for f in os.listdir(DOCS_DIR) if f.lower().endswith(('.md', '.txt', '.pdf'))]
-        if not file_names:
-            print("No documents found to index.")
-            return
+        file_names = [f for f in os.listdir(user_docs_dir) if f.lower().endswith(('.md', '.txt', '.pdf'))]
+        if file_names:
+            documents = []
+            for filename in file_names:
+                file_path = os.path.join(user_docs_dir, filename)
+                try:
+                    loader = PyPDFLoader(file_path) if filename.lower().endswith('.pdf') else TextLoader(file_path, encoding='utf-8')
+                    documents.extend(loader.load())
+                except Exception as e:
+                    print(f"ERROR: {filename}: {e}")
 
-        documents = []
-        for filename in file_names:
-            file_path = os.path.join(DOCS_DIR, filename)
-            try:
-                loader = PyPDFLoader(file_path) if filename.lower().endswith('.pdf') else TextLoader(file_path, encoding='utf-8')
-                documents.extend(loader.load())
-            except Exception as e:
-                print(f"ERROR: {filename}: {e}")
+            if documents:
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+                texts = text_splitter.split_documents(documents)
+                vs = FAISS.from_documents(texts, embeddings)
+                vs.save_local(user_faiss_dir)
+                qa = get_qa_chain(vs)
+    
+    user_systems[user_id] = {"vs": vs, "qa": qa}
+    return user_systems[user_id]
 
-        if documents:
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
-            texts = text_splitter.split_documents(documents)
-            vectorstore = FAISS.from_documents(texts, embeddings)
-            vectorstore.save_local(FAISS_INDEX)
-            qa_chain = get_qa_chain(vectorstore)
-            print(f"Created new index with {vectorstore.index.ntotal} vectors.")
+@app.get("/auth/google/login")
+async def login(request: Request):
+    # frontend_url = request.query_params.get("redirect_uri")
+    redirect_uri = request.url_for('auth_callback')
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+@app.get("/auth/google/callback")
+async def auth_callback(request: Request):
+    print("\n--- [OAuth Callback Hit] ---")
+    print(f"Query Params: {request.query_params}")
+    
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get('userinfo')
+        if not user_info:
+            print("ERROR: No user info found in token")
+            return {"error": "Google authentication failed", "details": "No user info"}
+        
+        print(f"User Authed: {user_info['email']}")
+        
+        # Store user/create session
+        user_id = user_info['email'].replace("@", "_").replace(".", "_")
+        jwt_token = create_access_token({"sub": user_id, "email": user_info['email'], "name": user_info['name']})
+        
+        # Init their RAG system
+        init_user_rag(user_id)
+        
+        frontend_url = os.getenv("FRONTEND_URL") or "http://localhost:5173"
+        print(f"Redirecting to {frontend_url}")
+        return RedirectResponse(url=f"{frontend_url}?token={jwt_token}")
+        
+    except Exception as e:
+        print(f"OAUTH ERROR: {type(e).__name__} - {e}")
+        # Return helpful error for debugging
+        return {
+            "error": "OAuth Callback Failed",
+            "type": type(e).__name__,
+            "details": str(e),
+            "msg": "Make sure your GOOGLE_CLIENT_ID and SECRET are set in .env"
+        }
+
+@app.get("/auth/me")
+async def get_me(user=Depends(get_current_user)):
+    return user
 
 @app.on_event("startup")
 async def startup_event():
-    init_rag()
+    if not os.path.exists(DOCS_ROOT): os.makedirs(DOCS_ROOT)
+    if not os.path.exists(FAISS_ROOT): os.makedirs(FAISS_ROOT)
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
 
 @app.get("/documents")
-async def list_documents():
-    if not os.path.exists(DOCS_DIR):
+async def list_documents(user=Depends(get_current_user)):
+    user_id = user['sub']
+    user_docs_dir = os.path.join(DOCS_ROOT, user_id)
+    if not os.path.exists(user_docs_dir):
         return {"documents": []}
-    files = [f for f in os.listdir(DOCS_DIR) if f.lower().endswith(('.md', '.txt', '.pdf'))]
+    files = [f for f in os.listdir(user_docs_dir) if f.lower().endswith(('.md', '.txt', '.pdf'))]
     return {"documents": files}
 
 @app.delete("/documents/{filename}")
-async def delete_document(filename: str):
-    file_path = os.path.join(DOCS_DIR, filename)
+async def delete_document(filename: str, user=Depends(get_current_user)):
+    user_id = user['sub']
+    user_docs_dir = os.path.join(DOCS_ROOT, user_id)
+    user_faiss_dir = os.path.join(FAISS_ROOT, user_id)
+    
+    file_path = os.path.join(user_docs_dir, filename)
     if os.path.exists(file_path):
         os.remove(file_path)
-        print(f"Deleted file: {filename}. Rebuilding index...")
-        # Clean index folder and rebuild to ensure file is completely removed from retrieval
-        if os.path.exists(FAISS_INDEX):
-            shutil.rmtree(FAISS_INDEX)
-        init_rag()
-        return {"message": f"Successfully deleted {filename} and rebuilt knowledge base."}
+        print(f"Deleted file: {filename} for user {user_id}. Rebuilding index...")
+        if os.path.exists(user_faiss_dir):
+            shutil.rmtree(user_faiss_dir)
+        init_user_rag(user_id)
+        return {"message": f"Successfully deleted {filename}."}
     else:
         raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/files/{filename}")
-async def serve_file(filename: str):
+async def serve_file(filename: str, user=Depends(get_current_user)):
     """Serves a document file for previewing."""
-    file_path = os.path.join(DOCS_DIR, filename)
+    user_id = user['sub']
+    file_path = os.path.join(DOCS_ROOT, user_id, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     
-    # Set proper content type for PDF previewing in browsers
     media_type = "application/pdf" if filename.lower().endswith(".pdf") else "text/plain"
     return FileResponse(file_path, media_type=media_type)
 
 @app.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
-    global vectorstore, qa_chain
-    if not os.path.exists(DOCS_DIR):
-        os.makedirs(DOCS_DIR)
+async def upload_document(file: UploadFile = File(...), user=Depends(get_current_user)):
+    user_id = user['sub']
+    user_docs_dir = os.path.join(DOCS_ROOT, user_id)
+    user_faiss_dir = os.path.join(FAISS_ROOT, user_id)
     
-    file_location = os.path.join(DOCS_DIR, file.filename)
+    if not os.path.exists(user_docs_dir):
+        os.makedirs(user_docs_dir)
+    
+    file_location = os.path.join(user_docs_dir, file.filename)
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
-    print(f"Ingesting new file: {file.filename}")
     try:
         loader = PyPDFLoader(file_location) if file.filename.lower().endswith('.pdf') else TextLoader(file_location, encoding='utf-8')
         new_docs = loader.load()
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
         new_texts = text_splitter.split_documents(new_docs)
         
-        if vectorstore:
-            vectorstore.add_documents(new_texts)
-            vectorstore.save_local(FAISS_INDEX)
-        else:
-            vectorstore = FAISS.from_documents(new_texts, embeddings)
-            vectorstore.save_local(FAISS_INDEX)
+        # Get or init user system
+        system = user_systems.get(user_id) or init_user_rag(user_id)
+        vs = system['vs']
         
-        # Update QA chain with new vectorstore state
-        qa_chain = get_qa_chain(vectorstore)
-        print(f"Updated index. Total vectors: {vectorstore.index.ntotal}")
+        if vs:
+            vs.add_documents(new_texts)
+            vs.save_local(user_faiss_dir)
+        else:
+            vs = FAISS.from_documents(new_texts, embeddings)
+            vs.save_local(user_faiss_dir)
+        
+        # Update cache
+        user_systems[user_id] = {"vs": vs, "qa": get_qa_chain(vs)}
+        
         return {
-            "message": f"Successfully added {file.filename} to knowledge base.",
+            "message": f"Successfully added {file.filename} to vault.",
             "filename": file.filename,
             "status": "uploaded"
         }
@@ -188,10 +329,15 @@ class QueryRequest(BaseModel):
     filename: str = None # Optional filter
 
 @app.post("/query")
-async def query_backend(req: QueryRequest):
-    if not qa_chain:
+async def query_backend(req: QueryRequest, user=Depends(get_current_user)):
+    user_id = user['sub']
+    system = user_systems.get(user_id) or init_user_rag(user_id)
+    vs = system['vs']
+    qa = system['qa']
+
+    if not qa:
         return {
-            "answer": "The RAG system is not yet initialized. Please upload at least one document to the vault first.",
+            "answer": "Your vault is empty. Please upload documents to begin.",
             "sources": [],
             "model": "System"
         }
@@ -200,33 +346,23 @@ async def query_backend(req: QueryRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
         
     try:
-        print(f"\n--- [Query: {req.query}] ---")
+        print(f"\n--- [Query from {user['email']}: {req.query}] ---")
         
         if req.filename and req.filename != "All Documents":
-            filter_path = os.path.join(DOCS_DIR, req.filename)
+            filter_path = os.path.join(DOCS_ROOT, user_id, req.filename)
             print(f"Filtering by path: {filter_path}")
-            filtered_retriever = vectorstore.as_retriever(
+            filtered_retriever = vs.as_retriever(
                 search_type="similarity", 
                 search_kwargs={"k": 8, "filter": {"source": filter_path}}
             )
             # Create a temporary chain for this filtered request
-            temp_chain = get_qa_chain(vectorstore)
+            temp_chain = get_qa_chain(vs)
             temp_chain.retriever = filtered_retriever
             result = temp_chain.invoke({"query": req.query})
         else:
-            result = qa_chain.invoke({"query": req.query})
-        
-        # Log retrieved chunks
-        print(f"Retrieved {len(result['source_documents'])} chunks.")
-        for idx, doc in enumerate(result['source_documents']):
-            source = os.path.basename(doc.metadata.get('source', 'unknown'))
-            print(f"[{source}] {doc.page_content[:100]}...")
+            result = qa.invoke({"query": req.query})
         
         sources = list(set([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in result["source_documents"]]))
-        
-        # Extract model name from the result metadata or default
-        # Note: with_fallbacks makes it hard to see the final model in result
-        # we will log it locally and use a placeholder or check response metadata
         active_model = "gemini-2.5-flash-lite" 
         
         return {

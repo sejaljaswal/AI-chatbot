@@ -13,3 +13,8 @@ pypdf
 pydantic
 langchain-classic
 python-multipart
+authlib
+python-jose[cryptography]
+httpx
+sqlalchemy
+itsdangerous
