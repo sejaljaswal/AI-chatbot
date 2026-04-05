@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import {
-  Send, RefreshCw, Bot, User, FileText,
+  Send, Bot, User, FileText,
   Trash2, Moon, Sun, Menu, Plus,
   LayoutGrid, ExternalLink, X, LogOut,
-  Maximize2, Minimize2, ChevronLeft, ChevronRight
+  Maximize2, Minimize2, ChevronLeft, ChevronRight,
+  MessageSquare
 } from 'lucide-react';
 
 type Message = {
@@ -38,6 +39,7 @@ export default function App() {
   const [targetDocument, setTargetDocument] = useState('All Documents');
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [viewerSize, setViewerSize] = useState<'small' | 'large' | 'full'>('small');
+  const [chatHistory, setChatHistory] = useState<any[]>([]);
   const [user, setUser] = useState<UserData | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('vault_token'));
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -48,6 +50,7 @@ export default function App() {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       fetchUser();
       fetchDocuments();
+      fetchHistory();
     } else {
       delete axios.defaults.headers.common['Authorization'];
     }
@@ -100,6 +103,41 @@ export default function App() {
       setIsDarkMode(true);
     }
   }, []);
+
+  const fetchHistory = async () => {
+    if (!localStorage.getItem('vault_token')) return;
+    try {
+      const res = await axios.get(`${API_URL}/history`);
+      if (res.data && res.data.history) {
+        // Reverse so newest is first in sidebar
+        setChatHistory([...res.data.history].reverse());
+      }
+    } catch (err) {
+      console.error("Failed to fetch history", err);
+    }
+  };
+
+  const loadChatFromHistory = (chat: any) => {
+    const flattened: Message[] = [
+      {
+        id: `${chat.id}_q`,
+        role: 'user',
+        content: chat.query,
+        timestamp: chat.timestamp.split(' ')[1]
+      },
+      {
+        id: `${chat.id}_a`,
+        role: 'bot',
+        content: chat.answer,
+        sources: chat.sources,
+        model: 'Gemini 2.5',
+        timestamp: chat.timestamp.split(' ')[1]
+      }
+    ];
+    setMessages(flattened);
+    // On mobile, close sidebar after selecting
+    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+  };
 
   const fetchDocuments = async () => {
     if (!localStorage.getItem('vault_token')) return;
@@ -182,6 +220,7 @@ export default function App() {
       };
 
       setMessages((prev) => [...prev, botMessage]);
+      fetchHistory(); // Refresh sidebar history
     } catch (error: any) {
       console.error(error);
       const errorMessage = error.response?.data?.detail || "I ran into an issue connecting to the RAG system.";
@@ -197,8 +236,27 @@ export default function App() {
     }
   };
 
-  const clearChat = () => {
+  const deleteHistoryEntry = async (e: React.MouseEvent, chat_id: string) => {
+    e.stopPropagation(); // Stop from loading the chat when clicking delete
+    if (!window.confirm("Delete this chat?")) return;
+
+    try {
+      await axios.delete(`${API_URL}/history/${chat_id}`);
+      setChatHistory(prev => prev.filter(c => c.id !== chat_id));
+      // If the currently viewed chat was deleted, clear the chat window
+      if (messages.some(m => m.id.startsWith(chat_id))) {
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error("Failed to delete chat", err);
+    }
+  };
+
+  const clearCurrentView = () => {
+    console.log("--- [DEBUG] New Chat Clicked ---");
     setMessages([]);
+    // Close sidebar on mobile for better UX
+    if (window.innerWidth < 1024) setIsSidebarOpen(false);
   };
 
   const handleLogout = () => {
@@ -362,6 +420,46 @@ export default function App() {
                 ))}
               </div>
             </div>
+
+            {/* Chat History Section */}
+            <div>
+              <div className="flex items-center justify-between mb-3 mt-4">
+                <h3 className="text-xs font-bold uppercase tracking-widest opacity-40 px-1">Recent Chats</h3>
+              </div>
+              <div className="space-y-1">
+                {chatHistory.length === 0 ? (
+                  <p className="text-[10px] opacity-20 italic px-3">No recent history</p>
+                ) : (
+                  chatHistory.map((chat, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => loadChatFromHistory(chat)}
+                      className={`w-full text-left p-3 rounded-xl transition-all border border-transparent group ${messages.some(m => m.id.startsWith(chat.id))
+                        ? 'bg-indigo-600/10 text-indigo-600 border-indigo-500/20'
+                        : 'hover:bg-slate-100 dark:hover:bg-zinc-800/50 text-zinc-500'
+                        }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <MessageSquare className={`w-4 h-4 flex-shrink-0 transition-opacity ${messages.some(m => m.id.startsWith(chat.id)) ? 'opacity-100' : 'opacity-30 group-hover:opacity-100'
+                          }`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-bold truncate leading-tight ${messages.some(m => m.id.startsWith(chat.id)) ? 'text-indigo-600' : 'text-zinc-700 dark:text-zinc-300'
+                            }`}>{chat.query}</p>
+                          <p className="text-[10px] opacity-40 mt-1 font-medium">{chat.timestamp.split(' ')[1]}</p>
+                        </div>
+                        <button
+                          onClick={(e) => deleteHistoryEntry(e, chat.id)}
+                          className="opacity-100 lg:opacity-0 group-hover:opacity-100 p-3 lg:p-1.5 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-950/30 rounded-lg transition-all min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          title="Delete Chat"
+                        >
+                          <Trash2 className="w-5 h-5 lg:w-3.5 lg:h-3.5" />
+                        </button>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="pt-6 border-t dark:border-zinc-800 space-y-2">
@@ -375,7 +473,13 @@ export default function App() {
                 <button onClick={handleLogout} className="text-rose-500 p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg"><LogOut className="w-3.5 h-3.5" /></button>
               </div>
             )}
-            <button onClick={clearChat} className="w-full flex items-center justify-center space-x-2 p-3 text-sm font-semibold border rounded-xl hover:bg-indigo-600 hover:text-white transition-all"><RefreshCw className="w-4 h-4" /><span>New Chat</span></button>
+            <button
+              onClick={clearCurrentView}
+              className="w-full flex items-center justify-center space-x-2 p-3 min-h-[44px] min-w-[44px] text-sm font-semibold border rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all relative z-50 pointer-events-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Chat</span>
+            </button>
             <button onClick={() => setIsDarkMode(!isDarkMode)} className={`w-full flex items-center justify-center space-x-2 p-3 text-sm font-semibold rounded-xl transition-all ${isDarkMode ? 'bg-zinc-800 text-zinc-300' : 'bg-slate-100 text-slate-600'}`}>{isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}<span>Theme</span></button>
           </div>
         </div>
@@ -453,8 +557,8 @@ export default function App() {
       {selectedFileUrl && (
         <aside
           className={`h-screen flex flex-col shadow-2xl transition-all duration-500 ease-in-out border-l transform-gpu ${viewerSize === 'full'
-              ? 'fixed inset-0 w-full z-[60]'
-              : `relative z-50 ${viewerSize === 'large' ? 'lg:w-[900px] xl:w-[1100px]' : 'lg:w-[550px] xl:w-[650px]'} w-full fixed lg:relative inset-y-0 right-0`
+            ? 'fixed inset-0 w-full z-[60]'
+            : `relative z-50 ${viewerSize === 'large' ? 'lg:w-[900px] xl:w-[1100px]' : 'lg:w-[550px] xl:w-[650px]'} w-full fixed lg:relative inset-y-0 right-0`
             } ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}
         >
           {/* Viewer Header Bar */}

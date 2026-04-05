@@ -9,6 +9,8 @@ from authlib.integrations.starlette_client import OAuth
 from jose import jwt, JWTError
 from starlette.middleware.sessions import SessionMiddleware
 import time
+import json
+from datetime import datetime
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import FAISS
@@ -50,6 +52,7 @@ app.add_middleware(
 # Root directory configuration
 DOCS_ROOT = "docs"
 FAISS_ROOT = "faiss_index"
+CHAT_HISTORY_ROOT = "chat_history"
 
 # AUTH CONFIG
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -162,6 +165,36 @@ def get_qa_chain(vs, retriever=None):
         chain_type_kwargs={"prompt": prompt}
     )
 
+def get_history_file(user_id: str):
+    user_history_dir = os.path.join(CHAT_HISTORY_ROOT, user_id)
+    if not os.path.exists(user_history_dir):
+        os.makedirs(user_history_dir)
+    return os.path.join(user_history_dir, "history.json")
+
+def load_user_history(user_id: str):
+    file_path = get_history_file(user_id)
+    if not os.path.exists(file_path):
+        return []
+    with open(file_path, "r") as f:
+        try:
+            return json.load(f)
+        except:
+            return []
+
+def save_user_chat(user_id: str, query: str, answer: str, sources: list = []):
+    history = load_user_history(user_id)
+    chat_entry = {
+        "id": str(time.time()),
+        "query": query,
+        "answer": answer,
+        "sources": sources,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    history.append(chat_entry)
+    with open(get_history_file(user_id), "w") as f:
+        json.dump(history, f, indent=2)
+    return chat_entry
+
 def init_user_rag(user_id: str):
     """Initializes or reloads the RAG system for a specific user."""
     print(f"\n--- [RAG System Init for User: {user_id}] ---")
@@ -204,6 +237,7 @@ def init_user_rag(user_id: str):
         print(f"INFO: Vault is currently empty for user {user_id}.")
     
     user_systems[user_id] = {"vs": vs, "qa": qa}
+    print(f"--- [Success] Vault isolation established for: {user_id} ---")
     return user_systems[user_id]
 
 @app.get("/auth/google/login")
@@ -255,6 +289,7 @@ async def get_me(user=Depends(get_current_user)):
 async def startup_event():
     if not os.path.exists(DOCS_ROOT): os.makedirs(DOCS_ROOT)
     if not os.path.exists(FAISS_ROOT): os.makedirs(FAISS_ROOT)
+    if not os.path.exists(CHAT_HISTORY_ROOT): os.makedirs(CHAT_HISTORY_ROOT)
 
 @app.get("/health")
 async def health_check():
@@ -288,10 +323,16 @@ async def delete_document(filename: str, user=Depends(get_current_user)):
 
 @app.get("/files/{filename}")
 async def serve_file(filename: str, user=Depends(get_current_user)):
-    """Serves a document file for previewing."""
+    """Serves a document file for previewing, ensuring user isolation."""
     user_id = user['sub']
-    file_path = os.path.join(DOCS_ROOT, user_id, filename)
+    # Sanitize filename and strictly enforce user path
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join(DOCS_ROOT, user_id, safe_filename)
+    
+    print(f"--- [Security] User {user_id} accessing file {safe_filename} ---")
+    
     if not os.path.exists(file_path):
+        print(f"--- [Security Failure] File {file_path} not found or access denied ---")
         raise HTTPException(status_code=404, detail="File not found")
     
     # Return FileResponse with proper headers for PDF viewing
@@ -307,10 +348,16 @@ async def upload_document(file: UploadFile = File(...), user=Depends(get_current
     user_docs_dir = os.path.join(DOCS_ROOT, user_id)
     user_faiss_dir = os.path.join(FAISS_ROOT, user_id)
     
+    # Ensure user-specific directory exists
     if not os.path.exists(user_docs_dir):
         os.makedirs(user_docs_dir)
     
-    file_location = os.path.join(user_docs_dir, file.filename)
+    # Sanitize filename
+    safe_filename = os.path.basename(file.filename)
+    file_location = os.path.join(user_docs_dir, safe_filename)
+    
+    print(f"--- [Upload] Processing file {safe_filename} for user {user_id} ---")
+    
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
@@ -393,6 +440,9 @@ async def query_backend(req: QueryRequest, user=Depends(get_current_user)):
         sources = list(set([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in result["source_documents"]]))
         active_model = "gemini-2.5-flash-lite" 
         
+        # PERSIST CHAT HISTORY
+        save_user_chat(user_id, req.query, result["result"], sources)
+        
         return {
             "answer": result["result"],
             "sources": sources,
@@ -402,10 +452,26 @@ async def query_backend(req: QueryRequest, user=Depends(get_current_user)):
         print(f"QUERY ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# CHAT HISTORY ENDPOINTS
+@app.get("/history")
+async def get_history(user=Depends(get_current_user)):
+    user_id = user['sub']
+    return {"history": load_user_history(user_id)}
+
+@app.delete("/history/{chat_id}")
+async def delete_chat_entry(chat_id: str, user=Depends(get_current_user)):
+    user_id = user['sub']
+    history = load_user_history(user_id)
+    new_history = [c for c in history if c['id'] != chat_id]
+    
+    with open(get_history_file(user_id), "w") as f:
+        json.dump(new_history, f, indent=2)
+    return {"message": "Chat deleted successfully."}
+
+# Note: Global DELETE /history is disabled to prevent accidental data loss.
+# Only individual chat deletion is supported via DELETE /history/{chat_id}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Use reload=True if you're developing and making frequent changes
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
