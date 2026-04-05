@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import {
-  Send, RefreshCw, Bot, User, Loader2, FileText,
-  CheckCircle, Trash2, Moon, Sun, Menu, Plus,
-  LayoutGrid, Clock, ExternalLink, X, LogOut
+  Send, RefreshCw, Bot, User, FileText,
+  Trash2, Moon, Sun, Menu, Plus,
+  LayoutGrid, ExternalLink, X, LogOut,
+  Maximize2, Minimize2, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 type Message = {
@@ -36,6 +37,7 @@ export default function App() {
   const [documents, setDocuments] = useState<DocFile[]>([]);
   const [targetDocument, setTargetDocument] = useState('All Documents');
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
+  const [viewerSize, setViewerSize] = useState<'small' | 'large' | 'full'>('small');
   const [user, setUser] = useState<UserData | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('vault_token'));
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -80,8 +82,21 @@ export default function App() {
     scrollToBottom();
   }, [messages]);
 
+  // Global side-effect for Dark Mode class
   useEffect(() => {
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  // Initialize theme from localStorage or system preference
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      setIsDarkMode(savedTheme === 'dark');
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setIsDarkMode(true);
     }
   }, []);
@@ -205,24 +220,84 @@ export default function App() {
 
   if (!token) {
     return (
-      <div className={`flex items-center justify-center min-h-screen ${isDarkMode ? 'bg-zinc-950' : 'bg-slate-50'}`}>
-        <div className={`p-10 rounded-[2.5rem] shadow-2xl border flex flex-col items-center text-center max-w-md w-full mx-4 transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}>
-          <div className="bg-indigo-600 p-4 rounded-3xl mb-8 shadow-xl shadow-indigo-500/20 rotate-3">
-            <LayoutGrid className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-3xl font-black mb-3 bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">Vault Brain</h1>
-          <p className="opacity-60 mb-10 text-sm leading-relaxed">
-            Your private AI knowledge workspace. Securely index and query your documents with Gemini 2.5 Flash-Lite.
-          </p>
-          <button
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center space-x-3 p-4 bg-white text-zinc-900 border border-zinc-200 rounded-2xl font-bold hover:bg-zinc-50 transition-all shadow-sm active:scale-95"
-          >
-            <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-            <span>Continue with Google</span>
-          </button>
-          <div className="mt-8 pt-8 border-t border-zinc-800/10 w-full text-[10px] uppercase tracking-widest opacity-30 font-bold">
-            End-to-End Encrypted Retrieval
+      <div className={`min-h-screen flex items-center justify-center p-4 relative transition-colors duration-500 overflow-hidden ${isDarkMode
+        ? 'dark bg-gray-950 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-gray-900 via-gray-950 to-indigo-950/20'
+        : 'bg-gray-100 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white via-gray-100 to-indigo-50'
+        }`}>
+        {/* Decorative elements - Background blobs */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-500/5 blur-[120px] rounded-full pointer-events-none" />
+
+        {/* Theme Toggle Button */}
+        <button
+          onClick={() => {
+            const nextMode = !isDarkMode;
+            setIsDarkMode(nextMode);
+            localStorage.setItem('theme', nextMode ? 'dark' : 'light');
+          }}
+          className={`absolute top-6 right-6 p-4 rounded-2xl shadow-lg border backdrop-blur-xl transition-all duration-300 hover:scale-110 active:scale-95 z-50 ${isDarkMode
+            ? 'bg-gray-800/80 text-yellow-400 border-gray-700'
+            : 'bg-white/80 text-gray-800 border-gray-200'
+            }`}
+          title="Toggle Theme"
+        >
+          {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5 rotate-12" />}
+        </button>
+
+        {/* Login Card */}
+        <div
+          className={`w-full max-w-md p-8 md:p-10 rounded-3xl shadow-2xl backdrop-blur-2xl transition-all duration-700 border transform-gpu hover:shadow-indigo-500/10 ${isDarkMode
+            ? 'bg-gray-900/60 border-gray-800 text-gray-100'
+            : 'bg-white/70 border-gray-100 text-gray-900'
+            }`}
+        >
+          <div className="flex flex-col items-center text-center space-y-8">
+            {/* Logo Icon with Pulse Gradient */}
+            <div className={`p-5 rounded-[2rem] shadow-2xl relative group-hover:rotate-12 transition-transform duration-500 ${isDarkMode
+              ? 'bg-indigo-600/30 text-indigo-400 ring-1 ring-indigo-500/50'
+              : 'bg-indigo-600 text-white shadow-indigo-500/30'
+              }`}>
+              <Bot className="w-12 h-12" />
+            </div>
+
+            {/* Header with improved typography */}
+            <div className="space-y-3">
+              <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent italic leading-[1.3]">
+                Vault Brain
+              </h1>
+              <div className="space-y-1">
+                <h2 className="text-xl font-bold">Welcome Back</h2>
+                <p className="text-sm font-medium opacity-50 tracking-tight">Access your personal AI document vault</p>
+              </div>
+            </div>
+
+            {/* Google Authentication Button - Modern Polish */}
+            <div className="w-full pt-4">
+              <button
+                onClick={handleLogin}
+                className={`flex items-center justify-center gap-4 w-full p-4.5 rounded-2xl border-2 font-bold text-base transition-all duration-300 transform-gpu active:scale-[0.98] group relative overflow-hidden ${isDarkMode
+                  ? 'bg-gray-800 border-gray-700 hover:border-indigo-500/50 text-white shadow-xl shadow-black/20'
+                  : 'bg-white border-gray-200 hover:border-indigo-100 text-gray-800 shadow-md hover:shadow-xl'
+                  }`}
+              >
+                <div className="bg-white p-1 rounded-md shadow-sm">
+                  <img
+                    src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png"
+                    className="w-6 h-6"
+                    alt="Google"
+                  />
+                </div>
+                <span className="relative z-10">Continue with Google</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out" />
+              </button>
+            </div>
+
+            {/* Security Indicator */}
+            <div className="flex items-center justify-center gap-2 pt-10 text-[11px] font-black uppercase tracking-[0.2em] opacity-20 antialiased italic">
+              <div className="w-1 h-1 rounded-full bg-current" />
+              E2E Encrypted Retrieval
+              <div className="w-1 h-1 rounded-full bg-current" />
+            </div>
           </div>
         </div>
       </div>
@@ -376,35 +451,78 @@ export default function App() {
       </div>
 
       {selectedFileUrl && (
-        <aside className="fixed inset-0 z-50 lg:relative lg:inset-auto lg:w-[600px] xl:w-[750px] flex flex-col border-l animate-in slide-in-from-right duration-300 bg-white dark:bg-zinc-900 border-zinc-800 shadow-2xl">
+        <aside
+          className={`h-screen flex flex-col shadow-2xl transition-all duration-500 ease-in-out border-l transform-gpu ${viewerSize === 'full'
+              ? 'fixed inset-0 w-full z-[60]'
+              : `relative z-50 ${viewerSize === 'large' ? 'lg:w-[900px] xl:w-[1100px]' : 'lg:w-[550px] xl:w-[650px]'} w-full fixed lg:relative inset-y-0 right-0`
+            } ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'}`}
+        >
+          {/* Viewer Header Bar */}
           <div className={`flex items-center justify-between p-4 border-b ${isDarkMode ? 'border-zinc-800' : 'border-slate-200'}`}>
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-indigo-600/10 rounded-lg">
+            <div className="flex items-center space-x-3 overflow-hidden">
+              <div className="p-2 bg-indigo-600/10 rounded-lg flex-shrink-0">
                 <FileText className="w-5 h-5 text-indigo-600" />
               </div>
-              <h3 className="font-bold text-sm truncate max-w-[120px] sm:max-w-[200px]">
+              <h3 className="font-bold text-sm truncate pr-2">
                 {selectedFileUrl.split('/').pop()?.split('?')[0]}
               </h3>
             </div>
-            <div className="flex items-center space-x-1">
+
+            <div className="flex items-center space-x-1 flex-shrink-0">
+              {/* Resize Toggle Controls (Only Desktop) */}
+              <div className="hidden lg:flex items-center space-x-1 mr-2 pr-2 border-r border-gray-500/20">
+                {viewerSize === 'small' ? (
+                  <button
+                    onClick={() => setViewerSize('large')}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"
+                    title="Expand View"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                ) : viewerSize === 'large' ? (
+                  <button
+                    onClick={() => setViewerSize('small')}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"
+                    title="Collapse View"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                ) : null}
+
+                {/* Fullscreen Toggle */}
+                <button
+                  onClick={() => setViewerSize(viewerSize === 'full' ? 'large' : 'full')}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"
+                  title={viewerSize === 'full' ? "Exit Fullscreen" : "Enter Fullscreen"}
+                >
+                  {viewerSize === 'full' ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                </button>
+              </div>
+
+              {/* Action Buttons */}
               <a
                 href={selectedFileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"
                 title="Open in new tab"
               >
-                <ExternalLink className="w-5 h-5 opacity-50" />
+                <ExternalLink className="w-5 h-5 opacity-70" />
               </a>
               <button
-                onClick={() => setSelectedFileUrl(null)}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-                title="Close"
+                onClick={() => {
+                  setSelectedFileUrl(null);
+                  setViewerSize('small'); // Reset to small for next time
+                }}
+                className="p-2 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/30 rounded-lg text-zinc-500 transition-colors"
+                title="Close Viewer"
               >
-                <X className="w-5 h-5 opacity-50" />
+                <X className="w-5 h-5 opacity-70" />
               </button>
             </div>
           </div>
+
+          {/* Iframe Container */}
           <div className="flex-1 bg-zinc-950 overflow-hidden relative">
             <iframe
               src={`${selectedFileUrl}#view=FitH`}
@@ -412,12 +530,15 @@ export default function App() {
               title="PDF Preview"
             />
           </div>
-          {/* Mobile Fallback Footer */}
+
+          {/* Mobile Overlay Fallback - Only visible when full height needed on mobile */}
           <div className="lg:hidden p-4 border-t bg-slate-50 dark:bg-zinc-800/50 flex justify-center">
-            <a href={selectedFileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 text-indigo-500 font-bold text-sm">
-              <ExternalLink className="w-4 h-4" />
-              <span>Full Screen Preview</span>
-            </a>
+            <button
+              onClick={() => setSelectedFileUrl(null)}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-500/20 shadow-indigo-500/20 active:scale-95"
+            >
+              Done Reading
+            </button>
           </div>
         </aside>
       )}
