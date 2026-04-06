@@ -34,6 +34,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [documents, setDocuments] = useState<DocFile[]>([]);
@@ -44,6 +45,14 @@ export default function App() {
   const [user, setUser] = useState<UserData | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('vault_token'));
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const PROGRESS_STEPS = [
+    "Understanding your query...",
+    "Scanning the document vault...",
+    "Retrieving relevant context...",
+    "Synthesizing your answer...",
+    "Almost there..."
+  ];
 
   // Axios Authorization Interceptor
   useEffect(() => {
@@ -204,20 +213,34 @@ export default function App() {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setLoadingMessage(PROGRESS_STEPS[0]);
 
-    // NEW: STREAMING IMPLEMENTATION
+    // Progressive loading messages
+    let stepIdx = 0;
+    let progressInterval: any;
     const botId = (Date.now() + 1).toString();
-    const botMessagePlaceholder: Message = {
-      id: botId,
-      role: 'bot',
-      content: '',
-      sources: [],
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setMessages((prev) => [...prev, botMessagePlaceholder]);
 
     try {
+      progressInterval = setInterval(() => {
+        stepIdx++;
+        if (stepIdx < PROGRESS_STEPS.length) {
+          setLoadingMessage(PROGRESS_STEPS[stepIdx]);
+        } else {
+          clearInterval(progressInterval);
+        }
+      }, 1500);
+
+      // Bot message placeholder
+      const botMessagePlaceholder: Message = {
+        id: botId,
+        role: 'bot',
+        content: '',
+        sources: [],
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setMessages((prev) => [...prev, botMessagePlaceholder]);
+
       const response = await fetch(`${API_URL}/query`, {
         method: "POST",
         headers: {
@@ -278,6 +301,9 @@ export default function App() {
       ));
     } finally {
       setIsLoading(false);
+      setLoadingMessage("");
+      // @ts-ignore
+      if (progressInterval) clearInterval(progressInterval);
     }
   };
 
@@ -582,7 +608,17 @@ export default function App() {
                 </div>
               </div>
             ))}
-            {isLoading && <div className="flex justify-start animate-pulse"><div className="w-10 h-10 rounded-2xl bg-purple-600/50 mr-4" /><div className="h-20 w-64 bg-zinc-800/50 rounded-3xl" /></div>}
+            {isLoading && (
+              <div className="flex justify-start items-center space-x-4 animate-in fade-in slide-in-from-left-4">
+                <div className="w-10 h-10 rounded-2xl bg-purple-600/20 flex items-center justify-center animate-pulse">
+                  <Bot className="w-6 h-6 text-purple-400" />
+                </div>
+                <div className={`px-4 py-2 rounded-2xl text-xs font-semibold flex items-center space-x-2 ${isDarkMode ? 'bg-zinc-900 text-zinc-500' : 'bg-slate-100 text-slate-500'}`}>
+                  <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
+                  <span className="animate-pulse">{loadingMessage || "Thinking..."}</span>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
         </main>
