@@ -248,8 +248,17 @@ def init_user_rag(user_id: str):
 
 @app.get("/auth/google/login")
 async def login(request: Request):
-    # frontend_url = request.query_params.get("redirect_uri")
-    redirect_uri = request.url_for('auth_callback')
+    redirect_uri = str(request.url_for('auth_callback'))
+    
+    # Fix HTTPS proxy mismatch in production
+    if "onrender.com" in redirect_uri and redirect_uri.startswith("http://"):
+        redirect_uri = redirect_uri.replace("http://", "https://")
+        
+    print("\n==============================================")
+    print("🚨 EXACT REDIRECT URI FOR GOOGLE CONSOLE 🚨")
+    print(f"REDIRECT URI: {redirect_uri}")
+    print("==============================================\n")
+    
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 @app.get("/auth/google/callback")
