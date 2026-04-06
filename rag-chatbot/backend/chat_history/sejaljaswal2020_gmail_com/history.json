@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "id": "1775459070.046863",
+    "query": "summarise 12 rules",
+    "answer": "Not found in documents.",
+    "sources": [
+      "12+Rules+to+Learn+to+Code+[2nd+Edition]+2022.pdf"
+    ],
+    "timestamp": "2026-04-06 12:34:30"
+  },
+  {
+    "id": "1775459490.109934",
+    "query": "summarise 12 rules",
+    "answer": "Not found in documents.",
+    "sources": [
+      "12+Rules+to+Learn+to+Code+[2nd+Edition]+2022.pdf"
+    ],
+    "timestamp": "2026-04-06 12:41:30"
+  }
+]
