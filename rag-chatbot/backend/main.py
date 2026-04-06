@@ -431,15 +431,26 @@ async def query_backend(req: QueryRequest, user=Depends(get_current_user)):
             filter_dict = {"source": os.path.join(DOCS_ROOT, user_id, req.filename)}
             print(f"Filtering by source: {filter_dict['source']}")
 
-        # 5. Check retriever & Get relevant documents
-        retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": 8, "filter": filter_dict})
+        # 5. DETECT "LIST TYPE" QUESTIONS & BOOST K
+        # If the user asks for a list, all items, or specific plural terms, we need more context
+        list_keywords = ["list", "all", "rules", "points", "steps", "stages", "every", "enumerate", "numbered", "bullet"]
+        is_list_query = any(kw in query.lower() for kw in list_keywords)
+        
+        retrieval_k = 20 if is_list_query else 10
+        print(f"Retrieval K: {retrieval_k} (List Detection: {is_list_query})")
+
+        # Get relevant documents
+        retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": retrieval_k, "filter": filter_dict})
         docs = retriever.invoke(query)
         print(f"Retrieved {len(docs)} chunks")
 
         # 6. Handle empty docs
         if not docs:
             print("QUERY ERROR: No relevant documents found")
-            return {"answer": "I couldn't find any relevant information in your uploaded documents.", "sources": [], "model": "RAG"}
+            async def empty_generator():
+                yield f"__SOURCES__:[]\n"
+                yield "I couldn't find any relevant information in your uploaded documents. Please ensure you have uploaded the correct PDFs and that they contain text."
+            return StreamingResponse(empty_generator(), media_type="text/plain")
 
         # 7. & 8. Build and validate context
         context_parts = []
@@ -447,23 +458,27 @@ async def query_backend(req: QueryRequest, user=Depends(get_current_user)):
             if doc.page_content and doc.page_content.strip():
                 context_parts.append(doc.page_content)
         
-        context = "\n---\n".join(context_parts)
+        context = "\n\n---\n\n".join(context_parts)
         if not context:
-            return {"answer": "The retrieved document snippets were empty or unreadable.", "sources": [], "model": "RAG"}
+            async def invalid_generator():
+                yield f"__SOURCES__:[]\n"
+                yield "The document content could not be read properly. It might be an image-only PDF or have protected text."
+            return StreamingResponse(invalid_generator(), media_type="text/plain")
 
         # Prepare source citations
         unique_sources = list(set([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in docs]))
 
         # 9. CONSTRUCT FINAL PROMPT
-        final_prompt = f"""You are an AI assistant. Answer clearly using the provided context.
+        # Enhanced for completeness
+        final_prompt = f"""You are an AI assistant. Answer clearly and EXHAUSTIVELY using the provided context.
 
 Rules:
-* Use proper paragraphs
-* Use bullet points where needed
-* Highlight important points
-* Keep answers concise but informative
-* Do NOT hallucinate
-* If not found, say 'Not found in documents'
+* If the question asks for a list, rules, or steps, you MUST include EVERY item mentioned in the context.
+* Do NOT summarize lists unless explicitly asked; provide the full list.
+* Use proper paragraphs and bullet points.
+* Highlight important points.
+* Do NOT hallucinate. 
+* If not found, say 'Not found in documents'.
 
 Context:
 {context}
