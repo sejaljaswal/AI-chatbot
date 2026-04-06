@@ -205,33 +205,77 @@ export default function App() {
     setInput('');
     setIsLoading(true);
 
+    // NEW: STREAMING IMPLEMENTATION
+    const botId = (Date.now() + 1).toString();
+    const botMessagePlaceholder: Message = {
+      id: botId,
+      role: 'bot',
+      content: '',
+      sources: [],
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages((prev) => [...prev, botMessagePlaceholder]);
+
     try {
-      const res = await axios.post(`${API_URL}/query`, {
-        query: userMessage.content,
-        filename: targetDocument
+      const response = await fetch(`${API_URL}/query`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          query: userMessage.content,
+          filename: targetDocument
+        })
       });
 
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'bot',
-        content: res.data.answer,
-        sources: res.data.sources,
-        model: res.data.model,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
+      if (!response.body) throw new Error("No response body");
 
-      setMessages((prev) => [...prev, botMessage]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = "";
+      let foundSources = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+
+        // Check for sources metadata in the first chunk
+        if (!foundSources && chunk.includes("__SOURCES__:")) {
+          const lines = chunk.split('\n');
+          const sourceLine = lines.find(l => l.startsWith("__SOURCES__:"));
+          if (sourceLine) {
+            try {
+              const sourcesJson = JSON.parse(sourceLine.replace("__SOURCES__:", ""));
+              setMessages(prev => prev.map(m =>
+                m.id === botId ? { ...m, sources: sourcesJson } : m
+              ));
+              foundSources = true;
+
+              // Remove the metadata line from the content
+              const contentValue = lines.filter(l => !l.startsWith("__SOURCES__:")).join('\n').trimStart();
+              fullContent += contentValue;
+            } catch (e) { console.error("Source parsing error", e); }
+          }
+        } else {
+          fullContent += chunk;
+        }
+
+        // Incrementally update the UI
+        setMessages(prev => prev.map(m =>
+          m.id === botId ? { ...m, content: fullContent } : m
+        ));
+      }
+
       fetchHistory(); // Refresh sidebar history
     } catch (error: any) {
       console.error(error);
-      const errorMessage = error.response?.data?.detail || "I ran into an issue connecting to the RAG system.";
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'bot',
-        content: errorMessage,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages((prev) => [...prev, botMessage]);
+      setMessages(prev => prev.map(m =>
+        m.id === botId ? { ...m, content: "I ran into an issue connecting to the RAG system." } : m
+      ));
     } finally {
       setIsLoading(false);
     }

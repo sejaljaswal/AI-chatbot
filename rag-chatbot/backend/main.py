@@ -1,7 +1,7 @@
 import os
 import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -454,8 +454,7 @@ async def query_backend(req: QueryRequest, user=Depends(get_current_user)):
         # Prepare source citations
         unique_sources = list(set([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in docs]))
 
-        # 9. Fix LLM call
-        # We manually construct the prompt using our professional assistant template
+        # 9. CONSTRUCT FINAL PROMPT
         final_prompt = f"""You are an AI assistant. Answer clearly using the provided context.
 
 Rules:
@@ -473,30 +472,38 @@ Question:
 {query}
 
 Answer:"""
-        
-        # Use our global shared LLM for response generation
-        print(f"Invoking LLM for response generation...")
-        response = shared_llm.invoke(final_prompt)
-        
-        answer_text = response.content if hasattr(response, 'content') else str(response)
 
-        # 10. Always return valid JSON
-        save_user_chat(user_id, query, answer_text, unique_sources)
-        return {
-            "answer": answer_text,
-            "sources": unique_sources,
-            "model": "Gemini 2.5 Flash"
-        }
+        # 9. ASYNC STREAMING GENERATOR
+        async def response_generator():
+            full_response = ""
+            # Yield metadata (sources) first as a single line
+            yield f"__SOURCES__:{json.dumps(unique_sources)}\n"
+            
+            try:
+                # Use astream for real-time chunking
+                async for chunk in shared_llm.astream(final_prompt):
+                    content = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                    full_response += content
+                    yield content
+                
+                # 10. Persist to history after the stream finishes
+                save_user_chat(user_id, query, full_response, unique_sources)
+                print(f"Stream complete. History saved for {user['email']}.")
+            except Exception as stream_err:
+                print(f"STREAM ERROR: {stream_err}")
+                yield f"\n[STREAM ERROR]: {str(stream_err)}"
+
+        return StreamingResponse(response_generator(), media_type="text/plain")
 
     except Exception as e:
         print(f"QUERY ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
-        return {
+        return JSONResponse(status_code=500, content={
             "answer": f"An internal error occurred: {str(e)}",
             "sources": [],
             "model": "Error Debugger"
-        }
+        })
 
 # CHAT HISTORY ENDPOINTS
 @app.get("/history")
