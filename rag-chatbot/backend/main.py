@@ -126,29 +126,32 @@ async def get_current_user(request: Request, token: str = None):
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# Global LLM Configuration with Fallbacks
+# Updated to Gemini 2.5 series based on accessible models list
+p_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0, max_retries=3)
+f_llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0, max_retries=3)
+shared_llm = p_llm.with_fallbacks([f_llm])
+
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
 def get_qa_chain(vs, retriever=None):
-    primary_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0, max_retries=3)
-    fallback_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, max_retries=3)
-    fallback_llm_2 = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0, max_retries=3)
-    llm = primary_llm.with_fallbacks([fallback_llm, fallback_llm_2])
-    
     # Use provided retriever or create a default one
     if not retriever:
         retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": 8})
     
     template = """
-    You are a strict assistant that only answers questions based on the provided context.
-    
-    Instructions:
-    1. Answer ONLY from the provided Context information below.
-    2. If the answer is NOT present in the Context, respond explicitly with: "I couldn't find this information in the provided documents."
-    3. Do NOT use outside knowledge or hallucinate details.
-    4. Provide clear, formatted answers using headings or bullet points if applicable.
+    You are an AI assistant. Answer clearly using the provided context.
+
+    Rules:
+    * Use proper paragraphs
+    * Use bullet points where needed
+    * Highlight important points (use bolding or italics)
+    * Keep answers concise but informative
+    * Do NOT hallucinate. 
+    * If not found in the context, explicitly say 'Not found in documents'
 
     ---
-    Context Information:
+    Context:
     {context}
     ---
 
@@ -159,7 +162,7 @@ def get_qa_chain(vs, retriever=None):
     prompt = PromptTemplate(template=template, input_variables=["context", "question"])
     
     return RetrievalQA.from_chain_type(
-        llm=llm,
+        llm=shared_llm,
         retriever=retriever,
         return_source_documents=True,
         chain_type_kwargs={"prompt": prompt}
@@ -402,55 +405,98 @@ class QueryRequest(BaseModel):
 @app.post("/query")
 async def query_backend(req: QueryRequest, user=Depends(get_current_user)):
     user_id = user['sub']
-    system = user_systems.get(user_id) or init_user_rag(user_id)
-    vs = system['vs']
-    qa = system['qa']
-
-    if not qa:
-        return {
-            "answer": "Your vault is empty. Please upload documents to begin.",
-            "sources": [],
-            "model": "System"
-        }
+    query = req.query.strip()
     
-    if not req.query.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty.")
-        
+    # 2. Log inputs
+    print(f"\n--- [QUERY DEBUG: {user['email']}] ---")
+    print(f"Query: {query}")
+
+    # 3. Validate query
+    if not query:
+        print("QUERY ERROR: Empty query")
+        return {"answer": "Please enter a question.", "sources": [], "model": "System"}
+
     try:
-        print(f"\n--- [Query from {user['email']}: {req.query}] ---")
+        system = user_systems.get(user_id) or init_user_rag(user_id)
+        vs = system.get('vs')
         
+        # 4. Check vectorstore
+        if not vs:
+            print("QUERY ERROR: No vectorstore found for user")
+            return {"answer": "No documents uploaded. Please upload PDFs to begin.", "sources": [], "model": "System"}
+
+        # Determine if we need to filter
+        filter_dict = {}
         if req.filename and req.filename != "All Documents":
-            filter_path = os.path.join(DOCS_ROOT, user_id, req.filename)
-            print(f"Filtering by path: {filter_path}")
-            filtered_retriever = vs.as_retriever(
-                search_type="similarity", 
-                search_kwargs={"k": 8, "filter": {"source": filter_path}}
-            )
-            # Create a temporary chain for this filtered request
-            temp_chain = get_qa_chain(vs, retriever=filtered_retriever)
-            result = temp_chain.invoke({"query": req.query})
-        else:
-            result = qa.invoke({"query": req.query})
+            filter_dict = {"source": os.path.join(DOCS_ROOT, user_id, req.filename)}
+            print(f"Filtering by source: {filter_dict['source']}")
+
+        # 5. Check retriever & Get relevant documents
+        retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": 8, "filter": filter_dict})
+        docs = retriever.invoke(query)
+        print(f"Retrieved {len(docs)} chunks")
+
+        # 6. Handle empty docs
+        if not docs:
+            print("QUERY ERROR: No relevant documents found")
+            return {"answer": "I couldn't find any relevant information in your uploaded documents.", "sources": [], "model": "RAG"}
+
+        # 7. & 8. Build and validate context
+        context_parts = []
+        for doc in docs:
+            if doc.page_content and doc.page_content.strip():
+                context_parts.append(doc.page_content)
         
-        # LOG RETRIEVED CONTEXT
-        print(f"--- [Retrieval Result: {len(result['source_documents'])} chunks] ---")
-        for i, doc in enumerate(result['source_documents']):
-            source = os.path.basename(doc.metadata.get('source', 'unknown'))
-            print(f"  [{i+1}] {source} (Chars: {len(doc.page_content)}): {doc.page_content[:150]}...")
-        sources = list(set([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in result["source_documents"]]))
-        active_model = "gemini-2.5-flash-lite" 
+        context = "\n---\n".join(context_parts)
+        if not context:
+            return {"answer": "The retrieved document snippets were empty or unreadable.", "sources": [], "model": "RAG"}
+
+        # Prepare source citations
+        unique_sources = list(set([os.path.basename(doc.metadata.get("source", "Unknown")) for doc in docs]))
+
+        # 9. Fix LLM call
+        # We manually construct the prompt using our professional assistant template
+        final_prompt = f"""You are an AI assistant. Answer clearly using the provided context.
+
+Rules:
+* Use proper paragraphs
+* Use bullet points where needed
+* Highlight important points
+* Keep answers concise but informative
+* Do NOT hallucinate
+* If not found, say 'Not found in documents'
+
+Context:
+{context}
+
+Question:
+{query}
+
+Answer:"""
         
-        # PERSIST CHAT HISTORY
-        save_user_chat(user_id, req.query, result["result"], sources)
+        # Use our global shared LLM for response generation
+        print(f"Invoking LLM for response generation...")
+        response = shared_llm.invoke(final_prompt)
         
+        answer_text = response.content if hasattr(response, 'content') else str(response)
+
+        # 10. Always return valid JSON
+        save_user_chat(user_id, query, answer_text, unique_sources)
         return {
-            "answer": result["result"],
-            "sources": sources,
-            "model": active_model
+            "answer": answer_text,
+            "sources": unique_sources,
+            "model": "Gemini 2.5 Flash"
         }
+
     except Exception as e:
-        print(f"QUERY ERROR: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"QUERY ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "answer": f"An internal error occurred: {str(e)}",
+            "sources": [],
+            "model": "Error Debugger"
+        }
 
 # CHAT HISTORY ENDPOINTS
 @app.get("/history")

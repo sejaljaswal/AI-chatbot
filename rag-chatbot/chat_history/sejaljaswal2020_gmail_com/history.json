@@ -1,20 +1,20 @@
 [
   {
-    "id": "1775386391.3186402",
-    "query": "jhi",
-    "answer": "I couldn't find this information in the provided documents.",
+    "id": "1775448688.6750941",
+    "query": "what are the 12 rules ?",
+    "answer": "Here are the rules mentioned in the provided context:\n\n*   RULE TWELVE: Break someone else's code\n*   RULE TEN: Get a Mentor\n*   RULE EIGHT: Keep Learning\n*   RULE ELEVEN: Get into the Habit of Chunking\n*   RULE SEVEN: Be Accountable\n*   RULE FIVE: It\u2019s Ok to Not Know\n*   RULE SIX: Be a Copycat",
     "sources": [
       "12+Rules+to+Learn+to+Code+[2nd+Edition]+2022.pdf"
     ],
-    "timestamp": "2026-04-05 16:23:11"
+    "timestamp": "2026-04-06 09:41:28"
   },
   {
-    "id": "1775386407.8105369",
-    "query": "d6k",
-    "answer": "I couldn't find this information in the provided documents.",
+    "id": "1775449585.392131",
+    "query": "what are the 12 rules",
+    "answer": "The document mentions several rules from \"12 Rules to Learn to Code\" by Dr. Angela Yu, but it does not provide all 12 rules.\n\nHere are the rules found in the provided context:\n\n*   **Rule 5:** It\u2019s Ok to Not Know\n*   **Rule 6:** Be a Copycat\n*   **Rule 7:** Be Accountable\n*   **Rule 8:** Keep Learning\n*   **Rule 10:** Get a Mentor\n*   **Rule 11:** Get into the Habit of Chunking\n*   **Rule 12:** Break someone else's code",
     "sources": [
       "12+Rules+to+Learn+to+Code+[2nd+Edition]+2022.pdf"
     ],
-    "timestamp": "2026-04-05 16:23:27"
+    "timestamp": "2026-04-06 09:56:25"
   }
 ]

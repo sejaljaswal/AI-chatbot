@@ -7,6 +7,7 @@ import {
   Maximize2, Minimize2, ChevronLeft, ChevronRight,
   MessageSquare
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 type Message = {
   id: string;
@@ -431,10 +432,11 @@ export default function App() {
                   <p className="text-[10px] opacity-20 italic px-3">No recent history</p>
                 ) : (
                   chatHistory.map((chat, idx) => (
-                    <button
+                    <div
                       key={idx}
+                      role="button"
                       onClick={() => loadChatFromHistory(chat)}
-                      className={`w-full text-left p-3 rounded-xl transition-all border border-transparent group ${messages.some(m => m.id.startsWith(chat.id))
+                      className={`w-full text-left p-3 rounded-xl transition-all border border-transparent group cursor-pointer ${messages.some(m => m.id.startsWith(chat.id))
                         ? 'bg-indigo-600/10 text-indigo-600 border-indigo-500/20'
                         : 'hover:bg-slate-100 dark:hover:bg-zinc-800/50 text-zinc-500'
                         }`}
@@ -449,13 +451,13 @@ export default function App() {
                         </div>
                         <button
                           onClick={(e) => deleteHistoryEntry(e, chat.id)}
-                          className="opacity-100 lg:opacity-0 group-hover:opacity-100 p-3 lg:p-1.5 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-950/30 rounded-lg transition-all min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          className="opacity-100 lg:opacity-0 group-hover:opacity-100 p-3 lg:p-1.5 hover:bg-rose-100 hover:text-rose-600 dark:hover:bg-rose-950/30 rounded-lg transition-all min-h-[44px] min-w-[44px] flex items-center justify-center relative z-10"
                           title="Delete Chat"
                         >
                           <Trash2 className="w-5 h-5 lg:w-3.5 lg:h-3.5" />
                         </button>
                       </div>
-                    </button>
+                    </div>
                   ))
                 )}
               </div>
@@ -513,8 +515,14 @@ export default function App() {
                     {message.role === 'user' ? <User className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
                   </div>
                   <div className="flex flex-col space-y-2">
-                    <div className={`p-5 rounded-3xl ${message.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : isDarkMode ? 'bg-zinc-900 border border-zinc-800 rounded-tl-none text-zinc-100' : 'bg-white border rounded-tl-none text-slate-800'}`}>
-                      <div className="prose prose-sm dark:prose-invert max-w-none break-words">{message.content}</div>
+                    <div className={`p-5 rounded-3xl whitespace-pre-wrap ${message.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : isDarkMode ? 'bg-zinc-900 border border-zinc-800 rounded-tl-none text-zinc-100' : 'bg-white border rounded-tl-none text-slate-800'}`}>
+                      <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                        {message.role === 'bot' ? (
+                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                        ) : (
+                          message.content
+                        )}
+                      </div>
                       {message.sources && message.sources.length > 0 && (
                         <div className="mt-5 pt-4 border-t border-zinc-800/10 flex flex-wrap gap-2">
                           <div className="text-[10px] font-bold uppercase opacity-40 mr-1 w-full">Sources:</div>
